@@ -1,0 +1,25 @@
+- name: Download the OpenTofu packages GPG key
+  ansible.builtin.get_url:
+    url: https://get.opentofu.org/opentofu.gpg
+    dest: /etc/apt/keyrings/opentofu-pkg.gpg
+    mode: '0644'
+
+- name: Download the OpenTofu repository GPG key
+  ansible.builtin.get_url:
+    url: https://packages.opentofu.org/opentofu/tofu/gpgkey
+    dest: /etc/apt/keyrings/opentofu-repo.asc
+    mode: '0644'
+
+
+- name: Add OpenTofu repository
+  apt_repository:
+    repo: "deb [signed-by=/etc/apt/keyrings/opentofu-pkg.gpg,/etc/apt/keyrings/opentofu-repo.asc] https://packages.opentofu.org/opentofu/tofu/any/ any main"
+    state: present
+    filename: 'opentofu'
+
+- name: Update APT cache and install OpenTofu
+  apt:
+    name: tofu
+    state: present
+    update_cache: yes
+

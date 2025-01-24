@@ -1,0 +1,20 @@
+- name: Fetch SSH keys from GitHub users
+  vars:
+    github_users:
+      - jpetazzo
+      - soulshake
+  ansible.builtin.uri:
+    url: "https://github.com/{{ item }}.keys"
+    return_content: yes
+  loop: "{{ github_users }}"
+  register: github_keys
+
+- name: Add fetched SSH keys to authorized_keys
+  lineinfile:
+    path: /root/.ssh/authorized_keys
+    line: "{{ item.content.strip() }}"
+    create: yes
+    mode: '0600'
+  loop: "{{ github_keys.results }}"
+  no_log: true # because this step is very verbose
+

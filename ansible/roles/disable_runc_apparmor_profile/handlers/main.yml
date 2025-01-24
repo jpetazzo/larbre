@@ -1,0 +1,4 @@
+# It looks like reloading AppArmor doesn't unload disabled profiles.
+# So we explicitly remove that profile. 
+- name: Unload runc AppArmor profile
+  command: apparmor_parser -R /etc/apparmor.d/runc

@@ -1,0 +1,45 @@
+- name: Ensure systemd-resolved is installed
+  package:
+    name:
+      - systemd-resolved
+    state: present
+
+- name: Install our /etc/nsswitch.conf file
+  copy:
+    content: |
+      passwd:         files systemd
+      group:          files systemd
+      shadow:         files systemd
+      gshadow:        files systemd
+
+      hosts:          files myhostname resolve [!UNAVAIL=return] dns
+      networks:       files
+
+      protocols:      db files
+      services:       db files
+      ethers:         db files
+      rpc:            db files
+
+      netgroup:       nis
+    dest: /etc/nsswitch.conf
+    mode: '0644'
+
+- name: Remove /etc/hosts
+  file:
+    path: /etc/hosts
+    state: absent
+
+- name: Ensure the /etc/systemd/resolved.conf.d/ directory exists
+  file:
+    path: /etc/systemd/resolved.conf.d/
+    state: directory
+    mode: '0755'
+
+- name: Create /etc/systemd/resolved.conf.d/cloudflare.conf to set fallback DNS servers
+  copy:
+    content: |
+      [Resolve]
+      DNS=1.1.1.1#cloudflare-dns.com 1.0.0.1#cloudflare-dns.com
+    dest: /etc/systemd/resolved.conf.d/cloudflare.conf
+    mode: '0644'
+  notify: restart systemd-resolved

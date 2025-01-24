@@ -1,0 +1,8 @@
+# See https://github.com/moby/moby/pull/47749
+- name: Disable runc AppArmor profile
+  file:
+    dest: /etc/apparmor.d/disable/runc
+    src: /etc/apparmor.d/runc
+    state: link
+  notify: Unload runc AppArmor profile
+

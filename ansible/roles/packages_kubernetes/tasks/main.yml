@@ -1,0 +1,48 @@
+- name: Download Kubernetes GPG key
+  ansible.builtin.get_url:
+    url: https://pkgs.k8s.io/core:/stable:/v{{ kubernetes_version }}/deb/Release.key
+    dest: /etc/apt/keyrings/kubernetes-{{ kubernetes_version }}.asc
+    mode: '0644'
+
+- name: Pin Kubernetes package version
+  copy:
+    content: |
+      Package: kubeadm kubectl kubelet
+      Pin: version {{ kubernetes_version }}-*
+      Pin-Priority: 1000
+    dest: /etc/apt/preferences.d/kubernetes
+    mode: '0644'
+
+- name: Add Kubernetes repository
+  apt_repository:
+    repo: "deb [signed-by=/etc/apt/keyrings/kubernetes-{{ kubernetes_version }}.asc] https://pkgs.k8s.io/core:/stable:/v{{ kubernetes_version }}/deb/ /"
+    filename: 'kubernetes-{{ kubernetes_version }}'
+
+- name: Update APT cache and install Kubernetes packages
+  apt:
+    update_cache: yes
+    name:
+      - containerd
+      - kubeadm
+      - kubelet
+      - kubectl
+    state: present
+
+- name: Create /etc/containerd directory
+  file:
+    path: /etc/containerd
+    state: directory
+
+- name: Create /etc/containerd/config.toml configuration file
+  copy:
+    content: |
+      version = 2
+      [plugins."io.containerd.grpc.v1.cri".containerd]
+      default_runtime_name = "runc"
+      [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc]
+      runtime_type = "io.containerd.runc.v2"
+      [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options]
+      SystemdCgroup = true
+    dest: /etc/containerd/config.toml
+    mode: '0644'
+  notify: Restart containerd

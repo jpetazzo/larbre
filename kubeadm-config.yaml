@@ -1,0 +1,32 @@
+kind: InitConfiguration
+apiVersion: kubeadm.k8s.io/v1beta3
+bootstrapTokens:
+- token: xxxxxx.xxxxxxxxxxxxxxxx
+nodeRegistration:
+  ignorePreflightErrors:
+  - NumCPU
+  - SystemVerification
+  - FileContent--proc-sys-net-ipv4-ip_forward
+---
+kind: JoinConfiguration
+apiVersion: kubeadm.k8s.io/v1beta3
+discovery:
+  bootstrapToken:
+    apiServerEndpoint: lawrence.local:6443
+    token: xxxxxx.xxxxxxxxxxxxxxxx
+    unsafeSkipCAVerification: true
+nodeRegistration:
+  ignorePreflightErrors:
+  - NumCPU
+  - SystemVerification
+  - FileContent--proc-sys-net-ipv4-ip_forward
+---
+kind: KubeletConfiguration
+apiVersion: kubelet.config.k8s.io/v1beta1
+failSwapOn: false
+---
+kind: ClusterConfiguration
+apiVersion: kubeadm.k8s.io/v1beta3
+apiServer:
+  certSANs:
+  - k8s.local

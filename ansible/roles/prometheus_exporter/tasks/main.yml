@@ -1,0 +1,5 @@
+- name: Ensure packages are installed
+  package:
+    name:
+      - prometheus-node-exporter
+    state: present

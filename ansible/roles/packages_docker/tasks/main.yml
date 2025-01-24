@@ -1,0 +1,6 @@
+- name: Install Docker with distribution packages
+  package:
+    name:
+      - docker.io
+    state: present
+

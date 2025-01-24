@@ -1,0 +1,11 @@
+- hosts: hypervisors
+  become: yes
+
+  roles:
+    - role: disable_pve_repo
+    - role: ssh_keys
+    - role: packages_tools
+    - role: opentofu
+    - role: terraform
+    - role: resolved
+    - role: prometheus_exporter

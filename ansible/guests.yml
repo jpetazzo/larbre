@@ -1,0 +1,20 @@
+- hosts: guests
+  become: yes
+  roles:
+    - role: ssh_keys
+    - role: packages_tools
+    - role: mdns
+
+- hosts: docker
+  become: yes
+  roles:
+    - role: packages_docker
+    - role: disable_runc_apparmor_profile
+
+- hosts: kubernetes
+  vars:
+    kubernetes_version: "1.30"
+  become: yes
+  roles:
+    - role: packages_kubernetes
+    - role: disable_runc_apparmor_profile

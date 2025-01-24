@@ -1,0 +1,45 @@
+- name: Ensure the /etc/systemd/resolved.conf.d/ directory exists
+  file:
+    path: /etc/systemd/resolved.conf.d/
+    state: directory
+    mode: '0755'
+
+- name: Create /etc/systemd/resolved.conf.d/mdns.conf to enable mdns globally
+  copy:
+    content: |
+      [Resolve]
+      MulticastDNS=yes
+    dest: /etc/systemd/resolved.conf.d/mdns.conf
+    mode: '0644'
+  notify: restart systemd-resolved
+
+- name: Check if the network configuration exists in /run/systemd/network/
+  stat:
+    path: /run/systemd/network/10-netplan-eth0.network
+  register: network_file
+
+- name: Fail if the network configuration file does not exist
+  when: not network_file.stat.exists
+  fail:
+    msg: "The network configuration file /run/systemd/network/10-netplan-eth0.network does not exist. Cannot proceed."
+
+- name: Create the drop-in directory if the network file exists
+  when: network_file.stat.exists
+  file:
+    path: /etc/systemd/network/10-netplan-eth0.network.d/
+    state: directory
+    mode: '0755'
+
+- name: Create the drop-in file if the network file exists
+  when: network_file.stat.exists
+  copy:
+    content: |
+      [Match]
+      Name=eth0
+
+      [Network]
+      MulticastDNS=yes
+    dest: /etc/systemd/network/10-netplan-eth0.network.d/mdns.conf
+    mode: '0644'
+  notify: restart systemd-networkd
+

@@ -1,0 +1,6 @@
+[guests]
+dodge ansible_host=192.168.1.101 ansible_user=ubuntu ansible_ssh_private_key_file=../sshkeys/sshkey.101
+lawrence ansible_host=192.168.1.103 ansible_user=ubuntu ansible_ssh_private_key_file=../sshkeys/sshkey.103
+spv ansible_host=192.168.1.105 ansible_user=ubuntu ansible_ssh_private_key_file=../sshkeys/sshkey.105
+topeka ansible_host=192.168.1.102 ansible_user=ubuntu ansible_ssh_private_key_file=../sshkeys/sshkey.102
+wichita ansible_host=192.168.1.104 ansible_user=ubuntu ansible_ssh_private_key_file=../sshkeys/sshkey.104

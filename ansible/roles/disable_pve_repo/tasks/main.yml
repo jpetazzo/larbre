@@ -1,0 +1,8 @@
+- name: Comment out lines starting with 'deb' in the pve-enterprise.list file
+  loop:
+    - pve-enterprise
+    - ceph
+  ansible.builtin.replace:
+    path: /etc/apt/sources.list.d/{{ item }}.list
+    regexp: '^deb '
+    replace: '### disabled by ansible ### \g<0>'
