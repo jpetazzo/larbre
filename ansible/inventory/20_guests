@@ -1,4 +1,5 @@
 [guests]
+byebyecloudflareimages ansible_host=192.168.1.107 ansible_user=ubuntu ansible_ssh_private_key_file=../sshkeys/sshkey.107
 dodge ansible_host=192.168.1.101 ansible_user=ubuntu ansible_ssh_private_key_file=../sshkeys/sshkey.101
 lawrence ansible_host=192.168.1.103 ansible_user=ubuntu ansible_ssh_private_key_file=../sshkeys/sshkey.103
 spv ansible_host=192.168.1.105 ansible_user=ubuntu ansible_ssh_private_key_file=../sshkeys/sshkey.105
