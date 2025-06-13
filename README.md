@@ -6,6 +6,7 @@ Homelab, 2024 edition!
 
 Subnets:
 
+| Name | Subnet         |
 |------|----------------|
 | AT&T | 192.168.1.0/24 |
 | Cox  | 192.168.2.0/25 |
@@ -13,6 +14,7 @@ Subnets:
 
 Hosts, IPv4:
 
+| Prefix    | Host    | Usage    |
 |-----------|---------|----------|
 | 192.168.X | 1       | gateway  |
 | 192.168.X.| 2-10    | reserved |
@@ -25,6 +27,7 @@ Hosts, IPv4:
 
 Hosts, IPv6:
 
+| Prefix  | Host                | Usage      |
 |---------|---------------------|------------|
 | x:x:x:x | xxxx:xxff:fexx:xxxx | SLAAC      |
 | x:x:x:x | 0000:0000:0000:xxxx | DHCP6      |
