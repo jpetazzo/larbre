@@ -1,46 +1,11 @@
 variable "vms" {
   default = {
-    dodge = {
-      vm_id     = 101,
-      memory_mb = 500,
-      cpu_cores = 1,
-      disk_gb   = 20,
-      hypervisor = "kansas",
-    },
-    topeka = {
-      vm_id     = 102,
-      memory_mb = 8192,
-      cpu_cores = 2,
-      disk_gb   = 100,
-      hypervisor = "kansas",
-    },
-    lawrence = {
-      vm_id     = 103,
-      memory_mb = 3072,
-      cpu_cores = 2,
-      disk_gb   = 50,
-      hypervisor = "kansas",
-    },
-    wichita = {
-      vm_id     = 104,
-      memory_mb = 8192,
-      cpu_cores = 2,
-      disk_gb   = 50,
-      hypervisor = "kansas",
-    },
     spv = {
       vm_id     = 105,
       memory_mb = 1024,
       cpu_cores = 1,
       disk_gb   = 100,
       hypervisor = "kansas",
-    },
-    byebyecloudflareimages = {
-      vm_id     = 107,
-      memory_mb = 4096,
-      cpu_cores = 3,
-      disk_gb   = 1535,
-      hypervisor = "colorado",
     },
   }
 }
