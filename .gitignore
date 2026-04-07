@@ -2,3 +2,4 @@
 /tofu/env
 /tofu/.terraform
 /tofu/terraform.tfstate*
+/tofu/.terraform.lock.hcl
