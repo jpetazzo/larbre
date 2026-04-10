@@ -1,7 +1,10 @@
 terraform {
+  backend "local" {
+    path = pathexpand("~/Sync/misc/tfstate/vms.tfstate")
+  }
   required_providers {
     proxmox = {
-      source = "bpg/proxmox"
+      source  = "bpg/proxmox"
       version = "0.63.0"
     }
   }

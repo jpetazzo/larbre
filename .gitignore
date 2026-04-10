@@ -1,5 +1,4 @@
 /sshkeys/
 /tofu/env
-/tofu/.terraform
-/tofu/terraform.tfstate*
-/tofu/.terraform.lock.hcl
+.terraform
+.terraform.lock.hcl

@@ -1,6 +1,6 @@
 # Arbre
 
-Homelab, 2024 edition!
+Homelab, 2026 edition!
 
 ## Networking
 
@@ -52,12 +52,32 @@ E.g.: VM #105 has:
 | colorado | 202 | N100  | 48 GB | 2 TB | 2 TB |
 | oregon   | 203 | N6000 | 64 GB | 2 TB | 2 TB |
 
+## Hypervisor installation
+
+From Proxmox USB media. ZFS rootfs. Join the PVE cluster.
+
+First disk (NVMe) is used for ZFS pool.
+
+Second disk (SATA or NVMe depending on what's available) is used for Ceph OSD.
+
+Network interfaces are enp2s0 to enp5s0.
+
+Three bridges are configured:
+- vmbr0 (enp2s0) = LAN
+- vmbr1 (enp3s0) = AT&T
+- vmbr2 (enp4s0) = Cox
+
+enp5s0 can be added to any of the bridges for convenience (until we get a proper
+switch; then perhaps we can do bonding with the LAN interface, or add a dedicated
+subnet for Ceph traffic or whatever).
+
+See `interfaces` file.
+
 ## Workloads
 
-- VM `topeka` (home assistant)
-- K8S cluster `es`
-  - 3 cp nodes (2 CPU, 4 GB RAM, 50 GB)
-  - 4 worker nodes (3 CPU, 16 GB RAM, 100 GB)
+| VM       | #   |
+| spv      | 105 |
+| haos13.2 | 106 |
 
 ## Deployment
 
@@ -81,36 +101,13 @@ From the `ansible` subdirectory:
 ansible-playbook -i inventory/ hypervisors.yml
 ```
 
----
-
-1) use ansible to configure hypervisors
-2) use tofu to create guests
-3) use ansible to configure guests
-4) setup kubernetes
-    - kubeadm init
-    - kubeadm join
-    - install CNI
-    - manually patch coredns spec.template.spec.dnsConfig.nameservers[0]=1.1.1.1
-
-common base:
-- cloud init to add ssh keys
-- then ansible to update ssh keys and install everything else
-- all machines connected to both uplinks, using DHCP on first interface, SLAAC on both interfaces
 
 - kansas
   - proxmox install with ZFS
   - make sure to define both bridges for both uplinks
   - set accept_ra=2 on bridges (for SLAAC)
 
-  - topeka (Docker host)
-    - ubuntu 24.04 common base
-    - docker
-    - containers to be started with Compose, Compose files in subdirs (ansible or not?)
-  - lawrence (K8S control plane)
-    - ubuntu 24.04 common base
-    - kubeadm, kubelet
-    - k8s workloads to be started with... Helmfile or other?
-    - proxmox CSI?
-  - wichita (K8S worker)
-    - similar to lawrence
 
+## Misc events
+
+2026-04-08 swapped out failed disk 1F2410070030098 on oregon

@@ -1,0 +1,40 @@
+auto lo
+iface lo inet loopback
+
+iface enp2s0 inet manual
+iface enp3s0 inet manual
+iface enp4s0 inet manual
+iface enp5s0 inet manual
+
+#auto vmbr0
+iface vmbr0 inet static
+        address 192.168.0.{{id}}/24
+        bridge-ports enp2s0
+        bridge-stp off
+        bridge-fd 0
+        up resolvectl mdns vmbr0 yes
+        up sysctl net.ipv6.conf.vmbr0.accept_ra=2
+
+auto vmbr1
+iface vmbr1 inet static
+        address 192.168.1.{{id}}/24
+        gateway 192.168.1.1
+        bridge-ports enp3s0 enp5s0
+        bridge-stp off
+        bridge-fd 0
+        up resolvectl mdns vmbr1 yes
+        up sysctl net.ipv6.conf.vmbr1.accept_ra=2
+        up ip -6 rule add from {{isp_1_prefix}}::/64 table 22001
+        up ip -6 route add default via fe80::{{isp_1_gateway}} table 22001 dev vmbr1
+
+auto vmbr2
+iface vmbr2 inet static
+        address 192.168.2.{{id}}/24
+        #gateway 192.168.2.1
+        bridge-ports enp4s0
+        bridge-stp off
+        bridge-fd 0
+        up resolvectl mdns vmbr2 yes
+        up sysctl net.ipv6.conf.vmbr2.accept_ra=2
+        up ip -6 rule add from {{isp_2_prefix}}::/64 table 22002
+        up ip -6 route add default via fe80::{{isp_2_gateway}} table 22002 dev vmbr2
