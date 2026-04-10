@@ -15,7 +15,7 @@ vms:
     disk_gb: 100
     image: ubuntu_2404_20240821
   111:
-    hostname: cp-ks
+    hostname: fmra-cp-ks
     hypervisor: kansas
     memory_mb: 2000
     cpu_cores: 2
@@ -23,7 +23,7 @@ vms:
     talos_cluster: fmra
     machine_type: controlplane
   112:
-    hostname: cp-co
+    hostname: fmra-cp-co
     hypervisor: colorado
     memory_mb: 2000
     cpu_cores: 2
@@ -31,7 +31,7 @@ vms:
     talos_cluster: fmra
     machine_type: controlplane
   113:
-    hostname: cp-or
+    hostname: fmra-cp-or
     hypervisor: oregon
     memory_mb: 2000
     cpu_cores: 2
@@ -39,7 +39,7 @@ vms:
     talos_cluster: fmra
     machine_type: controlplane
   121:
-    hostname: w-ks
+    hostname: fmra-w-ks
     hypervisor: kansas
     memory_mb: 16000
     cpu_cores: 3
@@ -47,7 +47,7 @@ vms:
     talos_cluster: fmra
     machine_type: worker
   122:
-    hostname: w-co
+    hostname: fmra-w-co
     hypervisor: colorado
     memory_mb: 20000
     cpu_cores: 3
@@ -55,10 +55,58 @@ vms:
     talos_cluster: fmra
     machine_type: worker
   123:
-    hostname: w-or
+    hostname: fmra-w-or
     hypervisor: oregon
     memory_mb: 24000
     cpu_cores: 3
     disk_gb: 100
     talos_cluster: fmra
+    machine_type: worker
+  131:
+    hostname: test-cp-ks
+    hypervisor: kansas
+    memory_mb: 2000
+    cpu_cores: 1
+    disk_gb: 50
+    talos_cluster: test
+    machine_type: controlplane
+  132:
+    hostname: test-cp-co
+    hypervisor: colorado
+    memory_mb: 2000
+    cpu_cores: 1
+    disk_gb: 50
+    talos_cluster: test
+    machine_type: controlplane
+  133:
+    hostname: test-cp-or
+    hypervisor: oregon
+    memory_mb: 2000
+    cpu_cores: 1
+    disk_gb: 50
+    talos_cluster: test
+    machine_type: controlplane
+  141:
+    hostname: test-w-ks
+    hypervisor: kansas
+    memory_mb: 2000
+    cpu_cores: 1
+    disk_gb: 50
+    talos_cluster: test
+    machine_type: worker
+  142:
+    hostname: test-w-co
+    hypervisor: colorado
+    memory_mb: 2000
+    cpu_cores: 1
+    disk_gb: 50
+    talos_cluster: test
+    machine_type: worker
+  143:
+    hostname: test-w-or
+    hypervisor: oregon
+    memory_mb: 2000
+    cpu_cores: 1
+    disk_gb: 50
+    talos_cluster: test
     machine_type: worker

@@ -1,80 +1,69 @@
-locals {
-  factory_url   = "https://factory.talos.dev"
-  platform      = "nocloud"
-  arch          = "amd64"
-  talos_version = "v1.12.6"
-  schematic     = file("schematic.yaml")
-  schematic_id  = jsondecode(data.http.schematic_id.response_body)["id"]
-  image_id      = "${local.schematic_id}_${local.talos_version}"
-}
+// INPUT
 
 locals {
-  fmra_k8s_nodes = {
+  talos_cluster_name = "fmra"
+  talos_version      = "v1.12.6"
+  talos_extensions   = ["siderolabs/intel-ucode"]
+  kubernetes_nodes = {
     for vmid, vmdata in local.all_vms :
-    vmid => vmdata if lookup(vmdata, "talos_cluster", "NOPE") == "fmra"
+    vmid => vmdata if lookup(vmdata, "talos_cluster", null) == "fmra"
   }
-  fmra_k8s_api_endpoint = "https://fmra.larb.re:6443"
-  fmra_first_node_id = [ for k,v in local.fmra_k8s_nodes: k if v.machine_type=="controlplane" ][0]
-  fmra_first_node = local.fmra_k8s_nodes[local.fmra_first_node_id]
-  fmra_kubernetes_version = data.talos_machine_configuration.fmra[local.fmra_first_node_id].kubernetes_version
-  proxmox_api_endpoint = "https://192.168.1.201:8006/api2/json" # FIXME use p_v_e_nodes ?
-  region = "redlady"
+  kubernetes_api_endpoint  = "https://fmra.larb.re:6443"
+  proxmox_api_endpoint     = "https://192.168.1.201:8006/api2/json" # FIXME use p_v_e_nodes ?
+  proxmox_cluster_name     = "larbre"                               # FIXME proxmox data source ?
+  kubernetes_ipv4_svccidr  = "10.11.0.0/16"
+  kubernetes_ipv4_podcidr  = "10.22.0.0/16"
+  kubernetes_ipv4_cidrsize = 24
+  kubernetes_ipv6_svccidr  = "fd11::/112"
+  kubernetes_ipv6_podcidr  = "fd22::/112"
+  kubernetes_ipv6_cidrsize = 120
 }
 
-data "http" "schematic_id" {
-  url          = "${local.factory_url}/schematics"
-  method       = "POST"
-  request_body = local.schematic
+// Computed stuff
+
+locals {
+  first_node_id      = [for k, v in local.kubernetes_nodes : k if v.machine_type == "controlplane"][0]
+  first_node         = local.kubernetes_nodes[local.first_node_id]
+  kubernetes_version = data.talos_machine_configuration._[local.first_node_id].kubernetes_version
 }
 
-resource "proxmox_virtual_environment_download_file" "talos_iso" {
-  for_each                = toset(local.proxmox_nodes)
-  node_name               = each.value
-  content_type            = "iso"
-  datastore_id            = "local"
-  decompression_algorithm = "gz"
-  overwrite               = false
-  url                     = "${local.factory_url}/image/${local.schematic_id}/${local.talos_version}/${local.platform}-${local.arch}.raw.gz"
-  file_name               = "talos-${local.schematic_id}-${local.talos_version}-${local.platform}-${local.arch}.img"
-}
-
-resource "talos_machine_secrets" "fmra" {
+resource "talos_machine_secrets" "_" {
   talos_version = local.talos_version
 }
 
-data "talos_client_configuration" "fmra" {
-  cluster_name         = "fmra"
-  client_configuration = talos_machine_secrets.fmra.client_configuration
-  nodes                = [for k, v in local.fmra_k8s_nodes : v.ipv4_addr]
-  endpoints            = [for k, v in local.fmra_k8s_nodes : v.ipv4_addr if v.machine_type == "controlplane"]
+data "talos_client_configuration" "_" {
+  cluster_name         = local.talos_cluster_name
+  client_configuration = talos_machine_secrets._.client_configuration
+  nodes                = [for k, v in local.kubernetes_nodes : v.ipv4_addr]
+  endpoints            = [for k, v in local.kubernetes_nodes : v.ipv4_addr if v.machine_type == "controlplane"]
 }
 
-data "talos_machine_configuration" "fmra" {
-  for_each         = local.fmra_k8s_nodes
-  cluster_name     = "fmra"
-  cluster_endpoint = local.fmra_k8s_api_endpoint
+data "talos_machine_configuration" "_" {
+  for_each         = local.kubernetes_nodes
+  cluster_name     = local.talos_cluster_name
+  cluster_endpoint = local.kubernetes_api_endpoint
   talos_version    = local.talos_version
   machine_type     = each.value.machine_type
-  machine_secrets  = talos_machine_secrets.fmra.machine_secrets
+  machine_secrets  = talos_machine_secrets._.machine_secrets
 }
 
-resource "proxmox_virtual_environment_vm" "fmra" {
-  for_each    = local.fmra_k8s_nodes
+resource "proxmox_virtual_environment_vm" "_" {
+  for_each    = local.kubernetes_nodes
   node_name   = each.value.hypervisor
   name        = each.value.hostname
-  description = each.value.machine_type == "controlplane" ? "FMRA Talos Control Plane" : "FMRA Talos Worker"
-  tags        = ["fmra"]
+  description = "Talos ${each.value.machine_type} node for cluster ${local.talos_cluster_name}"
+  tags        = [local.talos_cluster_name]
   on_boot     = true
   vm_id       = each.key
 
+  # We use OVMF instead of the default (SeaBIOS), because this gives us a
+  # high resolution text console. Normally we wouldn't care *at all* about
+  # the text console; but Talos spawns a dashboard on the console, and it's
+  # nice to have that dashboard in high resolution to see logs when things
+  # go sideways.
   bios = "ovmf"
   efi_disk {
     datastore_id = "local-zfs"
-  }
-
-  cpu {
-    cores = each.value.cpu_cores
-    type  = "x86-64-v2-AES"
   }
 
   # There seems to be a bug either in Proxmox or the Proxmox Terraform provider.
@@ -84,15 +73,13 @@ resource "proxmox_virtual_environment_vm" "fmra" {
     ignore_changes = [cpu[0].architecture]
   }
 
-  memory {
-    dedicated = each.value.memory_mb
+  cpu {
+    cores = each.value.cpu_cores
+    type  = "x86-64-v2-AES"
   }
 
-  network_device {
-    bridge = "vmbr1"
-  }
-  network_device {
-    bridge = "vmbr2"
+  memory {
+    dedicated = each.value.memory_mb
   }
 
   disk {
@@ -100,7 +87,7 @@ resource "proxmox_virtual_environment_vm" "fmra" {
     interface    = "virtio0"
     discard      = "on"
     size         = each.value.disk_gb
-    file_id      = proxmox_virtual_environment_download_file.talos_iso["${each.value.hypervisor}"].id
+    file_id      = proxmox_virtual_environment_download_file.talos_disk_image["${each.value.hypervisor}"].id
   }
 
   boot_order = ["scsi0"]
@@ -109,76 +96,115 @@ resource "proxmox_virtual_environment_vm" "fmra" {
     type = "l26"
   }
 
+  dynamic "network_device" {
+    for_each = each.value.networking
+    content {
+      bridge = network_device.value.bridge
+    }
+  }
+
   initialization {
     datastore_id = "local-zfs"
     dns {
       servers = ["1.0.0.1", "1.1.1.1"]
     }
-    ip_config {
-      ipv4 {
-        address = "${each.value.ipv4_addr}/${each.value.ipv4_cidr}"
-        gateway = each.value.ipv4_gateway
-      }
-      ipv6 {
-        address = each.value.vmnet1_ipv6_addr
-      }
-    }
-    ip_config {
-      ipv4 {
-        address = "dhcp"
-      }
-      ipv6 {
-        address = each.value.vmnet2_ipv6_addr
+    dynamic "ip_config" {
+      for_each = each.value.networking
+      content {
+        ipv4 {
+          address = "${ip_config.value.ipv4_addr}/${ip_config.value.ipv4_cidr}"
+          gateway = lookup(ip_config.value, "ipv4_gateway", null)
+        }
+        ipv6 {
+          address = ip_config.value.ipv6_addr
+        }
       }
     }
   }
 }
 
-resource "talos_machine_configuration_apply" "fmra" {
-  depends_on                  = [proxmox_virtual_environment_vm.fmra]
-  for_each                    = local.fmra_k8s_nodes
-  node                        = each.value.ipv4_addr
-  client_configuration        = talos_machine_secrets.fmra.client_configuration
-  machine_configuration_input = data.talos_machine_configuration.fmra[each.key].machine_configuration
-  config_patches              = [
-    file("machine_config.patch"),
+resource "talos_machine_configuration_apply" "_" {
+  depends_on                  = [ proxmox_virtual_environment_vm._ ]
+  for_each                    = local.kubernetes_nodes
+  node                        = each.value.networking[0].ipv4_addr
+  client_configuration        = talos_machine_secrets._.client_configuration
+  machine_configuration_input = data.talos_machine_configuration._[each.key].machine_configuration
+  config_patches = [
+    yamlencode({
+      cluster = {
+        controllerManager = {
+          extraArgs = {
+            "node-cidr-mask-size-ipv4" = local.kubernetes_ipv4_cidrsize
+            "node-cidr-mask-size-ipv6" = local.kubernetes_ipv6_cidrsize
+          }
+        }
+        network = {
+          podSubnets     = [local.kubernetes_ipv6_podcidr, local.kubernetes_ipv4_podcidr]
+          serviceSubnets = [local.kubernetes_ipv6_svccidr, local.kubernetes_ipv4_svccidr]
+        }
+      }
+    }),
+    yamlencode({
+      cluster = {
+        network = {
+          cni = {
+            name = "none"
+          }
+        }
+      }
+    }),
+    yamlencode({
+      cluster = {
+        proxy = {
+          disabled = true
+        }
+      }
+      machine = {
+        features = {
+          kubePrism = {
+            enabled = true
+            port    = 7445
+          }
+        }
+      }
+    }),
     yamlencode({
       machine = {
         nodeLabels = {
-          "topology.kubernetes.io/region" = local.region
-          "topology.kubernetes.io/zone" = each.value.hypervisor
+          "topology.kubernetes.io/region" = local.proxmox_cluster_name
+          "topology.kubernetes.io/zone"   = each.value.hypervisor
         }
       }
     }),
     yamlencode({
       cluster = {
         inlineManifests = [
-        {
-          name = "cilium"
-          contents = data.helm_template.cilium.manifest
-        },
-        {
-          name = "proxmox-csi-plugin"
-          contents = data.helm_template.proxmox-csi-plugin.manifest
-        },
-        {
-          name = "metrics-server"
-          contents = data.helm_template.metrics-server.manifest
-        },
+          {
+            name     = "cilium"
+            contents = data.helm_template.cilium.manifest
+          },
+          {
+            name     = "proxmox-csi-plugin"
+            contents = data.helm_template.proxmox-csi-plugin.manifest
+          },
+          {
+            name     = "metrics-server"
+            contents = data.helm_template.metrics-server.manifest
+          },
         ]
       }
     })
   ]
 }
 
-resource "talos_machine_bootstrap" "fmra" {
-  depends_on = [talos_machine_configuration_apply.fmra]
-  node                 = local.fmra_first_node.ipv4_addr
-  client_configuration = talos_machine_secrets.fmra.client_configuration
+resource "talos_machine_bootstrap" "_" {
+  depends_on           = [talos_machine_configuration_apply._]
+  node                 = local.first_node.ipv4_addr
+  client_configuration = talos_machine_secrets._.client_configuration
 }
 
 resource "proxmox_virtual_environment_role" "csi" {
-  role_id = "csi"
+  role_id = "csi-${local.talos_cluster_name}"
   privileges = [
     "VM.Audit",
     "VM.Config.Disk",
@@ -188,8 +214,8 @@ resource "proxmox_virtual_environment_role" "csi" {
   ]
 }
 
-resource "proxmox_virtual_environment_user" "csi_fmra" {
-  user_id = "csi_fmra@pve"
+resource "proxmox_virtual_environment_user" "csi" {
+  user_id = "csi-${local.talos_cluster_name}@pve"
   acl {
     path      = "/"
     propagate = true
@@ -197,26 +223,26 @@ resource "proxmox_virtual_environment_user" "csi_fmra" {
   }
 }
 
-resource "proxmox_virtual_environment_user_token" "csi_fmra" {
+resource "proxmox_virtual_environment_user_token" "csi" {
   token_name            = "csi"
-  user_id               = proxmox_virtual_environment_user.csi_fmra.user_id
+  user_id               = proxmox_virtual_environment_user.csi.user_id
   privileges_separation = false
 }
 
 resource "local_file" "talosconfig" {
   filename        = "talosconfig"
-  content         = data.talos_client_configuration.fmra.talos_config
+  content         = data.talos_client_configuration._.talos_config
   file_permission = "0600"
 }
 
-resource "talos_cluster_kubeconfig" "fmra" {
-  client_configuration = talos_machine_secrets.fmra.client_configuration
-  node                 = local.fmra_first_node.ipv4_addr
+resource "talos_cluster_kubeconfig" "_" {
+  client_configuration = talos_machine_secrets._.client_configuration
+  node                 = local.first_node.ipv4_addr
 }
 
 resource "local_file" "kubeconfig" {
   filename        = "kubeconfig"
-  content         = talos_cluster_kubeconfig.fmra.kubeconfig_raw
+  content         = talos_cluster_kubeconfig._.kubeconfig_raw
   file_permission = "0600"
 }
 
@@ -226,13 +252,13 @@ resource "tls_private_key" "cilium" {
 }
 
 resource "tls_self_signed_cert" "cilium" {
-  private_key_pem  = tls_private_key.cilium.private_key_pem
+  private_key_pem = tls_private_key.cilium.private_key_pem
 
   subject {
-    common_name  = "Cilium CA (from TF)"
+    common_name = "Cilium CA (managed by Terrafu)"
   }
 
-  validity_period_hours = 24*365
+  validity_period_hours = 24 * 365
 
   allowed_uses = [
     "key_encipherment",
@@ -247,8 +273,8 @@ data "helm_template" "cilium" {
   repository   = "https://helm.cilium.io"
   chart        = "cilium"
   version      = "1.19.2"
-  kube_version = local.fmra_kubernetes_version
-  values = [ 
+  kube_version = local.kubernetes_version
+  values = [
     <<-YAML
     autoDirectNodeRoutes: true
     cgroup:
@@ -270,12 +296,12 @@ data "helm_template" "cilium" {
     ipam:
       mode: cluster-pool
       operator:
-        clusterPoolIPv4MaskSize: 24
-        clusterPoolIPv4PodCIDRList: 10.44.0.0/16
-        clusterPoolIPv6MaskSize: 120
-        clusterPoolIPv6PodCIDRList: fd44::/112
-    ipv4NativeRoutingCIDR: 10.44.0.0/16
-    ipv6NativeRoutingCIDR: fd44::/112
+        clusterPoolIPv4MaskSize: ${local.kubernetes_ipv4_cidrsize}
+        clusterPoolIPv4PodCIDRList: ${local.kubernetes_ipv4_podcidr}
+        clusterPoolIPv6MaskSize: ${local.kubernetes_ipv6_cidrsize}
+        clusterPoolIPv6PodCIDRList: ${local.kubernetes_ipv6_podcidr}
+    ipv4NativeRoutingCIDR: ${local.kubernetes_ipv4_podcidr}
+    ipv6NativeRoutingCIDR: ${local.kubernetes_ipv6_podcidr}
     ipv6:
       enabled: true
     l2announcements:
@@ -295,20 +321,20 @@ data "helm_template" "cilium" {
 }
 
 data "helm_template" "proxmox-csi-plugin" {
-  namespace    = "kube-system"
-  name         = "proxmox-csi-plugin"
-  repository   = "oci://ghcr.io/sergelogvinov/charts"
-  chart        = "proxmox-csi-plugin"
-  version      = "0.5.6"
-  values = [ 
+  namespace  = "kube-system"
+  name       = "proxmox-csi-plugin"
+  repository = "oci://ghcr.io/sergelogvinov/charts"
+  chart      = "proxmox-csi-plugin"
+  version    = "0.5.6"
+  values = [
     <<-YAML
     config:
       clusters:
         - url: "${local.proxmox_api_endpoint}"
           insecure: true
-          token_id: "${proxmox_virtual_environment_user_token.csi_fmra.id}"
-          token_secret: "${split("=", proxmox_virtual_environment_user_token.csi_fmra.value)[1]}"
-          region: "${local.region}"
+          token_id: "${proxmox_virtual_environment_user_token.csi.id}"
+          token_secret: "${split("=", proxmox_virtual_environment_user_token.csi.value)[1]}"
+          region: "${local.proxmox_cluster_name}"
     storageClass:
       - name: local-zfs
         storage: local-zfs
@@ -323,11 +349,11 @@ data "helm_template" "proxmox-csi-plugin" {
 }
 
 data "helm_template" "metrics-server" {
-  namespace    = "kube-system"
-  name         = "metrics-server"
-  repository   = "https://kubernetes-sigs.github.io/metrics-server/"
-  chart        = "metrics-server"
-  version      = "3.13.0"
+  namespace  = "kube-system"
+  name       = "metrics-server"
+  repository = "https://kubernetes-sigs.github.io/metrics-server/"
+  chart      = "metrics-server"
+  version    = "3.13.0"
   values = [
     <<-YAML
     args:
