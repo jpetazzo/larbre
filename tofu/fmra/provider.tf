@@ -14,19 +14,7 @@ terraform {
 }
 
 provider "proxmox" {
-  endpoint = "https://colorado:8006/"
-  # TODO: use terraform variable or remove the line, and use PROXMOX_VE_USERNAME environment variable
-  #username = "root@pam"
-  # TODO: use terraform variable or remove the line, and use PROXMOX_VE_PASSWORD environment variable
-  #password = "the-password-set-during-installation-of-proxmox-ve"
-  # because self-signed TLS certificate is in use
-  insecure = true
-  # uncomment (unless on Windows...)
-  # tmp_dir  = "/var/tmp"
-
-  #ssh {
-  #  agent = true
-  #  # TODO: uncomment and configure if using api_token instead of password
-  #  # username = "root"
-  #}
+  # Check https://search.opentofu.org/provider/bpg/proxmox/latest#quick-examples
+  # We don't need SSH access, which means you can use an API token.
+  # We suggest to configure this with environment variables.
 }

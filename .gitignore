@@ -2,3 +2,5 @@
 /tofu/env
 .terraform
 .terraform.lock.hcl
+kubeconfig*
+talosconfig*

@@ -17,6 +17,11 @@ data "talos_image_factory_urls" "_" {
   architecture  = "amd64"
 }
 
+# Note: unfortunately...
+# - Proxmox doesn't support images compressed in xz format
+# - talos_image_factory_urls only provides URLs in xz format
+# So we're doing a little bit of search-and-replace in the URL. 😁
+
 resource "proxmox_virtual_environment_download_file" "talos_disk_image" {
   for_each                = toset(local.proxmox_nodes)
   node_name               = each.value
@@ -24,6 +29,6 @@ resource "proxmox_virtual_environment_download_file" "talos_disk_image" {
   datastore_id            = "local"
   decompression_algorithm = "gz"
   overwrite               = false
-  url                     = data.talos_image_factory_urls._.urls.disk_image
+  url                     = replace(data.talos_image_factory_urls._.urls.disk_image, "raw.xz", "raw.gz")
   file_name               = "talos-${local.talos_cluster_name}.img"
 }

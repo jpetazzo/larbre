@@ -1,30 +1,8 @@
-// INPUT
-
-locals {
-  talos_cluster_name = "fmra"
-  talos_version      = "v1.12.6"
-  talos_extensions   = ["siderolabs/intel-ucode"]
-  kubernetes_nodes = {
-    for vmid, vmdata in local.all_vms :
-    vmid => vmdata if lookup(vmdata, "talos_cluster", null) == "fmra"
-  }
-  kubernetes_api_endpoint  = "https://fmra.larb.re:6443"
-  proxmox_api_endpoint     = "https://192.168.1.201:8006/api2/json" # FIXME use p_v_e_nodes ?
-  proxmox_cluster_name     = "larbre"                               # FIXME proxmox data source ?
-  kubernetes_ipv4_svccidr  = "10.11.0.0/16"
-  kubernetes_ipv4_podcidr  = "10.22.0.0/16"
-  kubernetes_ipv4_cidrsize = 24
-  kubernetes_ipv6_svccidr  = "fd11::/112"
-  kubernetes_ipv6_podcidr  = "fd22::/112"
-  kubernetes_ipv6_cidrsize = 120
-}
-
-// Computed stuff
-
 locals {
   first_node_id      = [for k, v in local.kubernetes_nodes : k if v.machine_type == "controlplane"][0]
   first_node         = local.kubernetes_nodes[local.first_node_id]
   kubernetes_version = data.talos_machine_configuration._[local.first_node_id].kubernetes_version
+  proxmox_nodes = toset([for k, v in local.kubernetes_nodes: v.hypervisor])
 }
 
 resource "talos_machine_secrets" "_" {
@@ -34,8 +12,8 @@ resource "talos_machine_secrets" "_" {
 data "talos_client_configuration" "_" {
   cluster_name         = local.talos_cluster_name
   client_configuration = talos_machine_secrets._.client_configuration
-  nodes                = [for k, v in local.kubernetes_nodes : v.ipv4_addr]
-  endpoints            = [for k, v in local.kubernetes_nodes : v.ipv4_addr if v.machine_type == "controlplane"]
+  nodes                = [for k, v in local.kubernetes_nodes : v.networking[0].ipv4_addr]
+  endpoints            = [for k, v in local.kubernetes_nodes : v.networking[0].ipv4_addr if v.machine_type == "controlplane"]
 }
 
 data "talos_machine_configuration" "_" {
@@ -199,7 +177,7 @@ resource "talos_machine_configuration_apply" "_" {
 
 resource "talos_machine_bootstrap" "_" {
   depends_on           = [talos_machine_configuration_apply._]
-  node                 = local.first_node.ipv4_addr
+  node                 = local.first_node.networking[0].ipv4_addr
   client_configuration = talos_machine_secrets._.client_configuration
 }
 
@@ -229,21 +207,9 @@ resource "proxmox_virtual_environment_user_token" "csi" {
   privileges_separation = false
 }
 
-resource "local_file" "talosconfig" {
-  filename        = "talosconfig"
-  content         = data.talos_client_configuration._.talos_config
-  file_permission = "0600"
-}
-
 resource "talos_cluster_kubeconfig" "_" {
   client_configuration = talos_machine_secrets._.client_configuration
-  node                 = local.first_node.ipv4_addr
-}
-
-resource "local_file" "kubeconfig" {
-  filename        = "kubeconfig"
-  content         = talos_cluster_kubeconfig._.kubeconfig_raw
-  file_permission = "0600"
+  node                 = local.first_node.networking[0].ipv4_addr
 }
 
 resource "tls_private_key" "cilium" {
