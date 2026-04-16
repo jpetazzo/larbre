@@ -27,8 +27,9 @@ resource "proxmox_virtual_environment_download_file" "talos_disk_image" {
   node_name               = each.value
   content_type            = "iso"
   datastore_id            = "local"
-  decompression_algorithm = "gz"
+  #decompression_algorithm = "gz"
   overwrite               = false
-  url                     = replace(data.talos_image_factory_urls._.urls.disk_image, "raw.xz", "raw.gz")
-  file_name               = "talos-${local.talos_cluster_name}.img"
+  #url                     = replace(data.talos_image_factory_urls._.urls.disk_image, "raw.xz", "raw.gz")
+  url                     = data.talos_image_factory_urls._.urls.iso
+  file_name               = "talos-${local.talos_cluster_name}.iso"
 }

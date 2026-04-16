@@ -1,19 +1,44 @@
+/*
+ * 'talop' (Talos Proxmox) is a module to provision Kubernetes clusters
+ * with the Talos distribution (by Siderolabs) on Proxmox hypervisors.
+ *
+ * It is very opinionated; so it may or may not work for your use-case.
+ * You might be able to use it for inspiration or by modifiying it to suit your needs.
+ *
+ * Here are our technical choices:
+ * - create virtual machines on a PVE (Proxmox Virtual Environment) cluster
+ * - IP addresses and VM ids must be set ahead of time, in TF variables
+ *   (we don't want to use DHCP or automatic id assignment)
+ * - install Talos on these virtual machines and bootstrap the control plane
+ * - use Cilium for CNI and kube-proxy replacement
+ * - dual stack (IPV4+IPV6)
+ * - Proxmox CSI plugin pre-installed
+ * - metrics-server pre-installed
+ *
+ * Check 'demo.tfvars' for an example showing how to use this module.
+ */
+
 locals {
   first_node_id      = [for k, v in local.kubernetes_nodes : k if v.machine_type == "controlplane"][0]
   first_node         = local.kubernetes_nodes[local.first_node_id]
+  first_node_addr    = split("/", local.first_node.networking[0].ipv4_address)[0]
   kubernetes_version = data.talos_machine_configuration._[local.first_node_id].kubernetes_version
-  proxmox_nodes = toset([for k, v in local.kubernetes_nodes: v.hypervisor])
+  proxmox_nodes      = toset([for k, v in local.kubernetes_nodes : v.hypervisor])
 }
 
+# Note: do not specify talos_version in there!
+# Otherwise, when the talos_version gets updated (which could happen
+# automatically, since the default value is computed dynamically)
+# this will cause a replacement of that resource, which will invalidate
+# all cluster secrets (and generally break everything).
 resource "talos_machine_secrets" "_" {
-  talos_version = local.talos_version
 }
 
 data "talos_client_configuration" "_" {
   cluster_name         = local.talos_cluster_name
   client_configuration = talos_machine_secrets._.client_configuration
-  nodes                = [for k, v in local.kubernetes_nodes : v.networking[0].ipv4_addr]
-  endpoints            = [for k, v in local.kubernetes_nodes : v.networking[0].ipv4_addr if v.machine_type == "controlplane"]
+  nodes                = [ for k, v in local.kubernetes_nodes : split("/", v.networking[0].ipv4_address)[0] ]
+  endpoints            = [ for k, v in local.kubernetes_nodes : split("/", v.networking[0].ipv4_address)[0] if v.machine_type == "controlplane"]
 }
 
 data "talos_machine_configuration" "_" {
@@ -65,10 +90,13 @@ resource "proxmox_virtual_environment_vm" "_" {
     interface    = "virtio0"
     discard      = "on"
     size         = each.value.disk_gb
-    file_id      = proxmox_virtual_environment_download_file.talos_disk_image["${each.value.hypervisor}"].id
   }
 
-  boot_order = ["scsi0"]
+  cdrom {
+    file_id = proxmox_virtual_environment_download_file.talos_disk_image["${each.value.hypervisor}"].id
+  }
+
+  boot_order = ["virtio0", "ide3"]
 
   operating_system {
     type = "l26"
@@ -90,11 +118,11 @@ resource "proxmox_virtual_environment_vm" "_" {
       for_each = each.value.networking
       content {
         ipv4 {
-          address = "${ip_config.value.ipv4_addr}/${ip_config.value.ipv4_cidr}"
+          address = ip_config.value.ipv4_address
           gateway = lookup(ip_config.value, "ipv4_gateway", null)
         }
         ipv6 {
-          address = ip_config.value.ipv6_addr
+          address = ip_config.value.ipv6_address
         }
       }
     }
@@ -102,12 +130,23 @@ resource "proxmox_virtual_environment_vm" "_" {
 }
 
 resource "talos_machine_configuration_apply" "_" {
-  depends_on                  = [ proxmox_virtual_environment_vm._ ]
+  depends_on                  = [proxmox_virtual_environment_vm._]
   for_each                    = local.kubernetes_nodes
-  node                        = each.value.networking[0].ipv4_addr
+  node                        = split("/", each.value.networking[0].ipv4_address)[0]
   client_configuration        = talos_machine_secrets._.client_configuration
   machine_configuration_input = data.talos_machine_configuration._[each.key].machine_configuration
   config_patches = [
+    # Since we boot from an ISO image, we need to install Talos on a disk.
+    yamlencode({
+      machine = {
+        install = {
+          disk = "/dev/vda"
+          image = data.talos_image_factory_urls._.urls.installer
+        }
+      }
+    }),
+    # This is the "magic" that enables dual stack on the Kubernetes cluster.
+    # Note: it's also necessary that the CNI configuration+plugin that we use supports it!
     yamlencode({
       cluster = {
         controllerManager = {
@@ -122,6 +161,7 @@ resource "talos_machine_configuration_apply" "_" {
         }
       }
     }),
+    # Disable the default CNI, as we're going to use Cilium instead.
     yamlencode({
       cluster = {
         network = {
@@ -131,6 +171,9 @@ resource "talos_machine_configuration_apply" "_" {
         }
       }
     }),
+    # Disable kube-proxy; we're also going to use Cilium there.
+    # The kubePrism bit is here to allow Cilium to contact the k8s API server
+    # (since we obviously can't use kube-proxy for that purpose).
     yamlencode({
       cluster = {
         proxy = {
@@ -146,6 +189,7 @@ resource "talos_machine_configuration_apply" "_" {
         }
       }
     }),
+    # This is required by the Proxmox CSI plugin.
     yamlencode({
       machine = {
         nodeLabels = {
@@ -154,6 +198,11 @@ resource "talos_machine_configuration_apply" "_" {
         }
       }
     }),
+    # And this is how we preload Cilium and a few other things.
+    # Note: if you're adding new manifests here to an existing cluster,
+    # they will be applied immediately by Talos; however, if you update
+    # or remove manifests, the changes will be applied only when you
+    # run 'talosctl upgrade-k8s'.
     yamlencode({
       cluster = {
         inlineManifests = [
@@ -175,9 +224,13 @@ resource "talos_machine_configuration_apply" "_" {
   ]
 }
 
+# Note: this merely sends a request to the Talos API running on the first node,
+# but it doesn't wait for completion; so Terraform/Tofu will report that the
+# configuration has been applied, but the cluster will take a minute or so to
+# become truly available.
 resource "talos_machine_bootstrap" "_" {
-  depends_on           = [talos_machine_configuration_apply._]
-  node                 = local.first_node.networking[0].ipv4_addr
+  depends_on           = [ talos_machine_configuration_apply._ ]
+  node                 = local.first_node_addr
   client_configuration = talos_machine_secrets._.client_configuration
 }
 
@@ -209,8 +262,17 @@ resource "proxmox_virtual_environment_user_token" "csi" {
 
 resource "talos_cluster_kubeconfig" "_" {
   client_configuration = talos_machine_secrets._.client_configuration
-  node                 = local.first_node.networking[0].ipv4_addr
+  node                 = local.first_node_addr
 }
+
+# By default, the Cilium Helm chart generates a key and self-signed cert
+# for Cilium's internal CA. This is fine when using a "normal" Helm workflow
+# (with 'helm install' and then 'helm upgrade'), but it doesn't work anymore
+# when using infra-as-code or gitops tools that render the Helm template
+# like we do here, because each time we re-evaluate the template, it will
+# generate a new key and certificate.
+# To avoid that, we generate that key and certificate ourselves, and then
+# pass them as Helm values when rendering the template.
 
 resource "tls_private_key" "cilium" {
   algorithm = "RSA"
